@@ -11,14 +11,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import auth from '@react-native-firebase/auth';
+import { userStorage } from '../lib/storage/userStorage';
 
 export default function AuthScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [confirmation, setConfirmation] = useState<any>(null);
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [isNewUser, setIsNewUser] = useState(false);
   const phoneInputRef = useRef<TextInput>(null);
   const otpInputRef = useRef<TextInput>(null);
 
@@ -41,6 +42,11 @@ export default function AuthScreen() {
     setPhoneNumber(formattedNumber);
   };
 
+  const generateOTP = () => {
+    // Generate a 6-digit OTP
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
   const handleSendOtp = async () => {
     if (!isValidUAENumber(phoneNumber)) {
       Alert.alert(
@@ -52,24 +58,25 @@ export default function AuthScreen() {
 
     setIsLoading(true);
     try {
-      // Format the phone number with UAE country code
-      const formattedPhoneNumber = '+971' + phoneNumber;
+      // Check if phone number is registered
+      const isRegistered = await userStorage.isPhoneRegistered(phoneNumber);
+      setIsNewUser(!isRegistered);
+
+      // Generate and store OTP
+      const newOtp = generateOTP();
+      setGeneratedOtp(newOtp);
       
-      // Send OTP using Firebase
-      const confirmation = await auth().signInWithPhoneNumber(formattedPhoneNumber);
-      setConfirmation(confirmation);
+      // In a real app, you would send this OTP via SMS
+      // For demo purposes, we'll just show it in an alert
+      Alert.alert(
+        'Demo OTP',
+        `Your verification code is: ${newOtp}`,
+        [{ text: 'OK' }]
+      );
+      
       setShowOtpInput(true);
-    } catch (error: any) {
-      let errorMessage = 'Failed to send verification code. Please try again.';
-      
-      // Handle specific Firebase error codes
-      if (error.code === 'auth/invalid-phone-number') {
-        errorMessage = 'The phone number format is invalid.';
-      } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many attempts. Please try again later.';
-      }
-      
-      Alert.alert('Error', errorMessage);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send verification code. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -86,22 +93,28 @@ export default function AuthScreen() {
 
     setIsLoading(true);
     try {
-      // Verify OTP using Firebase
-      await confirmation.confirm(otp);
-      
-      // If successful, navigate to the main app
-      router.replace('/(tabs)');
-    } catch (error: any) {
-      let errorMessage = 'Invalid verification code. Please try again.';
-      
-      // Handle specific Firebase error codes
-      if (error.code === 'auth/invalid-verification-code') {
-        errorMessage = 'The verification code is invalid.';
-      } else if (error.code === 'auth/code-expired') {
-        errorMessage = 'The verification code has expired. Please request a new one.';
+      // Verify OTP
+      if (otp === generatedOtp) {
+        if (isNewUser) {
+          // For new users, create initial user data
+          const initialUserData = {
+            name: '',
+            email: '',
+            phone: phoneNumber,
+            address: '',
+          };
+          await userStorage.saveUserData(initialUserData);
+          // Navigate to personal details to complete profile
+          router.replace('/personal-details');
+        } else {
+          // For existing users, navigate to main app
+          router.replace('/(tabs)');
+        }
+      } else {
+        Alert.alert('Error', 'Invalid verification code. Please try again.');
       }
-      
-      Alert.alert('Error', errorMessage);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to verify code. Please try again.');
     } finally {
       setIsLoading(false);
     }

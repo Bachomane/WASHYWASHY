@@ -1,23 +1,114 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Calendar, Car, Sparkles, MessageCircle } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { userStorage, SubscriptionData } from '../lib/storage/userStorage';
 
 export default function SubscriptionScreen() {
-  const handleContactSupport = () => {
-    console.log('Opening WhatsApp support');
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadSubscriptionData();
+  }, []);
+
+  const loadSubscriptionData = async () => {
+    try {
+      const data = await userStorage.getSubscriptionData();
+      setSubscription(data);
+    } catch (error) {
+      console.error('Error loading subscription data:', error);
+      Alert.alert('Error', 'Failed to load subscription data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleCancelSubscription = () => {
-    console.log('Canceling subscription');
+  const handleContactSupport = () => {
+    Alert.alert('Contact Support', 'Opening WhatsApp support...');
   };
+
+  const handleCancelSubscription = async () => {
+    try {
+      if (subscription) {
+        const updatedSubscription = {
+          ...subscription,
+          status: 'cancelled' as const,
+        };
+        await userStorage.saveSubscriptionData(updatedSubscription);
+        setSubscription(updatedSubscription);
+        Alert.alert('Success', 'Your subscription has been cancelled');
+      }
+    } catch (error) {
+      console.error('Error cancelling subscription:', error);
+      Alert.alert('Error', 'Failed to cancel subscription');
+    }
+  };
+
+  const handleSubscribe = async () => {
+    try {
+      const newSubscription: SubscriptionData = {
+        plan: 'Emerald Duo Plan',
+        status: 'active',
+        price: 220,
+        cars: 2,
+        frequency: 'Twice Weekly',
+        nextPayment: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+        paymentMethod: 'Credit Card ending in 1234',
+        addOns: [
+          {
+            name: 'Interior Duo',
+            price: 135,
+            description: 'Complete interior cleaning for two cars, including all interior surfaces and vacuuming.',
+          },
+        ],
+      };
+      await userStorage.saveSubscriptionData(newSubscription);
+      setSubscription(newSubscription);
+      Alert.alert('Success', 'You have successfully subscribed to the plan');
+    } catch (error) {
+      console.error('Error subscribing:', error);
+      Alert.alert('Error', 'Failed to subscribe to the plan');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!subscription) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#000000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Subscription</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.noSubscriptionContainer}>
+          <Text style={styles.noSubscriptionText}>No Active Subscription</Text>
+          <TouchableOpacity style={styles.subscribeButton} onPress={handleSubscribe}>
+            <Text style={styles.subscribeButtonText}>Subscribe Now</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -34,22 +125,29 @@ export default function SubscriptionScreen() {
         {/* Current Plan */}
         <View style={styles.planCard}>
           <View style={styles.planHeader}>
-            <Text style={styles.planTitle}>Emerald Duo Plan</Text>
-            <View style={styles.planStatus}>
-              <Text style={styles.planStatusText}>Active</Text>
+            <Text style={styles.planTitle}>{subscription.plan}</Text>
+            <View style={[
+              styles.planStatus,
+              { backgroundColor: subscription.status === 'active' ? '#10B981' : '#EF4444' }
+            ]}>
+              <Text style={styles.planStatusText}>
+                {subscription.status.charAt(0).toUpperCase() + subscription.status.slice(1)}
+              </Text>
             </View>
           </View>
-          <Text style={styles.planPrice}>AED 220/month</Text>
-          <Text style={styles.planDescription}>2 Cars • Exterior Wash Twice Weekly</Text>
+          <Text style={styles.planPrice}>AED {subscription.price}/month</Text>
+          <Text style={styles.planDescription}>
+            {subscription.cars} Cars • {subscription.frequency}
+          </Text>
           
           <View style={styles.planFeatures}>
             <View style={styles.featureItem}>
               <Car size={16} color="#0000f0" />
-              <Text style={styles.featureText}>2 Cars included</Text>
+              <Text style={styles.featureText}>{subscription.cars} Cars included</Text>
             </View>
             <View style={styles.featureItem}>
               <Calendar size={16} color="#0000f0" />
-              <Text style={styles.featureText}>Twice weekly washes</Text>
+              <Text style={styles.featureText}>{subscription.frequency} washes</Text>
             </View>
             <View style={styles.featureItem}>
               <Sparkles size={16} color="#0000f0" />
@@ -59,18 +157,20 @@ export default function SubscriptionScreen() {
         </View>
 
         {/* Add-ons */}
-        <View style={styles.addOnsSection}>
-          <Text style={styles.sectionTitle}>Active Add-ons</Text>
-          <View style={styles.addOnCard}>
-            <View style={styles.addOnHeader}>
-              <Text style={styles.addOnTitle}>Interior Duo</Text>
-              <Text style={styles.addOnPrice}>AED 135/month</Text>
-            </View>
-            <Text style={styles.addOnDescription}>
-              Complete interior cleaning for two cars, including all interior surfaces and vacuuming.
-            </Text>
+        {subscription.addOns.length > 0 && (
+          <View style={styles.addOnsSection}>
+            <Text style={styles.sectionTitle}>Active Add-ons</Text>
+            {subscription.addOns.map((addOn, index) => (
+              <View key={index} style={styles.addOnCard}>
+                <View style={styles.addOnHeader}>
+                  <Text style={styles.addOnTitle}>{addOn.name}</Text>
+                  <Text style={styles.addOnPrice}>AED {addOn.price}/month</Text>
+                </View>
+                <Text style={styles.addOnDescription}>{addOn.description}</Text>
+              </View>
+            ))}
           </View>
-        </View>
+        )}
 
         {/* Billing Information */}
         <View style={styles.billingSection}>
@@ -78,33 +178,18 @@ export default function SubscriptionScreen() {
           <View style={styles.billingCard}>
             <View style={styles.billingRow}>
               <Text style={styles.billingLabel}>Next Payment</Text>
-              <Text style={styles.billingValue}>May 15, 2024</Text>
+              <Text style={styles.billingValue}>{subscription.nextPayment}</Text>
             </View>
             <View style={styles.billingRow}>
               <Text style={styles.billingLabel}>Payment Method</Text>
-              <Text style={styles.billingValue}>Credit Card ending in 1234</Text>
+              <Text style={styles.billingValue}>{subscription.paymentMethod}</Text>
             </View>
             <View style={styles.billingRow}>
               <Text style={styles.billingLabel}>Total Monthly</Text>
-              <Text style={styles.billingValue}>AED 355</Text>
+              <Text style={styles.billingValue}>
+                AED {subscription.price + subscription.addOns.reduce((sum, addOn) => sum + addOn.price, 0)}
+              </Text>
             </View>
-          </View>
-        </View>
-
-        {/* Next Wash */}
-        <View style={styles.nextWashSection}>
-          <Text style={styles.sectionTitle}>Next Wash</Text>
-          <View style={styles.nextWashCard}>
-            <View style={styles.nextWashHeader}>
-              <Calendar size={20} color="#0000f0" />
-              <Text style={styles.nextWashDate}>Tomorrow at 9:00 AM</Text>
-            </View>
-            <Text style={styles.nextWashDetails}>
-              Both cars will be washed at your home location
-            </Text>
-            <TouchableOpacity style={styles.rescheduleButton}>
-              <Text style={styles.rescheduleButtonText}>Reschedule</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -115,9 +200,11 @@ export default function SubscriptionScreen() {
             <Text style={styles.contactButtonText}>Contact Support</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.cancelButton} onPress={handleCancelSubscription}>
-            <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
-          </TouchableOpacity>
+          {subscription.status === 'active' && (
+            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelSubscription}>
+              <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -170,7 +257,6 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   planStatus: {
-    backgroundColor: '#10B981',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -264,43 +350,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#000000',
   },
-  nextWashSection: {
-    marginBottom: 24,
-  },
-  nextWashCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
-  },
-  nextWashHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  nextWashDate: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#000000',
-  },
-  nextWashDetails: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-  rescheduleButton: {
-    backgroundColor: '#0000f0',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  rescheduleButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
-  },
   actionsSection: {
     gap: 12,
   },
@@ -329,5 +378,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#EF4444',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noSubscriptionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  noSubscriptionText: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#374151',
+    marginBottom: 20,
+  },
+  subscribeButton: {
+    backgroundColor: '#0000f0',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  subscribeButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
   },
 }); 
