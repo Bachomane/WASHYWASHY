@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,13 @@ import {
   Edit
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { userStorage, UserData } from '../../lib/storage/userStorage';
+
+interface UserInfo {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
 
 interface Vehicle {
   id: string;
@@ -49,13 +55,13 @@ export default function ProfileScreen() {
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [userInfo, setUserInfo] = useState<UserData>({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
+
+  const [userInfo, setUserInfo] = useState<UserInfo>({
+    name: 'Ahmed Al-Rashid',
+    email: 'ahmed.alrashid@email.com',
+    phone: '+971 50 123 4567',
+    address: 'Villa 123, Arabian Ranches 3, Dubai',
   });
-  const [isLoading, setIsLoading] = useState(true);
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([
     {
@@ -78,39 +84,8 @@ export default function ProfileScreen() {
 
   const router = useRouter();
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      const data = await userStorage.getUserData();
-      if (data) {
-        setUserInfo(data);
-        if (data.profileImage) {
-          setProfileImage(data.profileImage);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-      Alert.alert('Error', 'Failed to load user data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    try {
-      await userStorage.saveUserData({
-        ...userInfo,
-        profileImage: profileImage || undefined,
-      });
-      setIsEditing(false);
-      Alert.alert('Success', 'Your name has been updated');
-    } catch (error) {
-      console.error('Error saving user data:', error);
-      Alert.alert('Error', 'Failed to save your information');
-    }
+  const handleSave = () => {
+    setIsEditing(false);
   };
 
   const handleNameEdit = () => {
@@ -158,16 +133,6 @@ export default function ProfileScreen() {
 
     if (!result.canceled) {
       setProfileImage(result.assets[0].uri);
-      // Save the updated user data with the new profile image
-      try {
-        await userStorage.saveUserData({
-          ...userInfo,
-          profileImage: result.assets[0].uri,
-        });
-      } catch (error) {
-        console.error('Error saving profile image:', error);
-        Alert.alert('Error', 'Failed to save profile image');
-      }
     }
   };
 
@@ -183,14 +148,9 @@ export default function ProfileScreen() {
         {
           text: "Logout",
           style: "destructive",
-          onPress: async () => {
-            try {
-              await userStorage.clearAllData();
-              router.replace('/auth');
-            } catch (error) {
-              console.error('Error during logout:', error);
-              Alert.alert('Error', 'Failed to logout properly');
-            }
+          onPress: () => {
+            // Here you would typically clear any auth tokens or user data
+            router.replace('/auth');
           }
         }
       ]
@@ -215,16 +175,6 @@ export default function ProfileScreen() {
     { icon: LogOut, title: 'Logout', onPress: handleLogout },
   ];
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text>Loading...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -236,7 +186,7 @@ export default function ProfileScreen() {
                 <Image source={{ uri: profileImage }} style={styles.avatarImage} />
               ) : (
                 <Text style={styles.avatarText}>
-                  {userInfo.name ? userInfo.name.charAt(0).toUpperCase() : '?'}
+                  {userInfo.name.charAt(0).toUpperCase()}.
                 </Text>
               )}
               <View style={styles.cameraIcon}>
@@ -256,12 +206,9 @@ export default function ProfileScreen() {
                     autoFocus
                     onBlur={handleSave}
                     onSubmitEditing={handleSave}
-                    placeholder="Enter your name"
                   />
                 ) : (
-                  <Text style={styles.userName}>
-                    {userInfo.name || 'Add your name'}
-                  </Text>
+                  <Text style={styles.userName}>{userInfo.name}</Text>
                 )}
               </View>
               <TouchableOpacity onPress={handleNameEdit} style={styles.editButton}>
@@ -315,14 +262,6 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* Version Info */}
-        <View style={styles.versionSection}>
-          <Text style={styles.versionText}>Version 5.23.0</Text>
-        </View>
-
-        {/* Bottom Spacing */}
-        <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
   );

@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { userStorage } from '../lib/storage/userStorage';
 
 export default function AuthScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -19,7 +18,6 @@ export default function AuthScreen() {
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [generatedOtp, setGeneratedOtp] = useState('');
-  const [isNewUser, setIsNewUser] = useState(false);
   const phoneInputRef = useRef<TextInput>(null);
   const otpInputRef = useRef<TextInput>(null);
 
@@ -58,10 +56,6 @@ export default function AuthScreen() {
 
     setIsLoading(true);
     try {
-      // Check if phone number is registered
-      const isRegistered = await userStorage.isPhoneRegistered(phoneNumber);
-      setIsNewUser(!isRegistered);
-
       // Generate and store OTP
       const newOtp = generateOTP();
       setGeneratedOtp(newOtp);
@@ -95,21 +89,8 @@ export default function AuthScreen() {
     try {
       // Verify OTP
       if (otp === generatedOtp) {
-        if (isNewUser) {
-          // For new users, create initial user data
-          const initialUserData = {
-            name: '',
-            email: '',
-            phone: phoneNumber,
-            address: '',
-          };
-          await userStorage.saveUserData(initialUserData);
-          // Navigate to personal details to complete profile
-          router.replace('/personal-details');
-        } else {
-          // For existing users, navigate to main app
-          router.replace('/(tabs)');
-        }
+        // If successful, navigate to the main app
+        router.replace('/(tabs)');
       } else {
         Alert.alert('Error', 'Invalid verification code. Please try again.');
       }

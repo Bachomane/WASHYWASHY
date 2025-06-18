@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,50 +7,32 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Save, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { userStorage, UserData } from '../lib/storage/userStorage';
+
+interface UserInfo {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
 
 export default function PersonalDetailsScreen() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [userInfo, setUserInfo] = useState<UserData>({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
+  const [userInfo, setUserInfo] = useState<UserInfo>({
+    name: 'Ahmed Al-Rashid',
+    email: 'ahmed.alrashid@email.com',
+    phone: '+971 50 123 4567',
+    address: 'Villa 123, Arabian Ranches 3, Dubai',
   });
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      const data = await userStorage.getUserData();
-      if (data) {
-        setUserInfo(data);
-        if (data.profileImage) {
-          setProfileImage(data.profileImage);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-      Alert.alert('Error', 'Failed to load user data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Please allow access to your photos');
       return;
     }
 
@@ -66,36 +48,10 @@ export default function PersonalDetailsScreen() {
     }
   };
 
-  const handleSave = async () => {
-    try {
-      // Validate required fields
-      if (!userInfo.name || !userInfo.email || !userInfo.phone) {
-        Alert.alert('Error', 'Please fill in all required fields');
-        return;
-      }
-
-      const updatedUserData: UserData = {
-        ...userInfo,
-        profileImage: profileImage || undefined,
-      };
-      await userStorage.saveUserData(updatedUserData);
-      Alert.alert('Success', 'Your information has been saved');
-      router.back();
-    } catch (error) {
-      console.error('Error saving user data:', error);
-      Alert.alert('Error', 'Failed to save your information');
-    }
+  const handleSave = () => {
+    // Save user info logic here
+    router.back();
   };
-
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text>Loading...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -117,11 +73,11 @@ export default function PersonalDetailsScreen() {
           <TouchableOpacity style={styles.avatar} onPress={pickImage}>
             {profileImage ? (
               <Text style={styles.avatarText}>
-                {userInfo.name.charAt(0).toUpperCase()}
+                {userInfo.name.charAt(0).toUpperCase()}.
               </Text>
             ) : (
               <Text style={styles.avatarText}>
-                {userInfo.name ? userInfo.name.charAt(0).toUpperCase() : '?'}
+                {userInfo.name.charAt(0).toUpperCase()}.
               </Text>
             )}
             <View style={styles.cameraIcon}>
@@ -135,7 +91,7 @@ export default function PersonalDetailsScreen() {
           <Text style={styles.sectionTitle}>Personal Information</Text>
           
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Full Name *</Text>
+            <Text style={styles.inputLabel}>Full Name</Text>
             <TextInput
               style={styles.input}
               value={userInfo.name}
@@ -145,25 +101,35 @@ export default function PersonalDetailsScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Email Address *</Text>
+            <Text style={styles.inputLabel}>Email Address</Text>
             <TextInput
               style={styles.input}
               value={userInfo.email}
               onChangeText={(text) => setUserInfo({ ...userInfo, email: text })}
               placeholder="Enter your email"
               keyboardType="email-address"
-              autoCapitalize="none"
             />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Phone Number *</Text>
+            <Text style={styles.inputLabel}>Phone Number</Text>
             <TextInput
               style={styles.input}
               value={userInfo.phone}
               onChangeText={(text) => setUserInfo({ ...userInfo, phone: text })}
               placeholder="Enter your phone number"
               keyboardType="phone-pad"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Address</Text>
+            <TextInput
+              style={styles.input}
+              value={userInfo.address}
+              onChangeText={(text) => setUserInfo({ ...userInfo, address: text })}
+              placeholder="Enter your address"
+              multiline
             />
           </View>
         </View>
@@ -259,10 +225,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#000000',
     backgroundColor: '#FFFFFF',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 }); 

@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalBookButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#0000f0',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
