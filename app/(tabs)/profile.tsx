@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -33,59 +33,95 @@ import {
   Edit
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { supabaseService } from '../../lib/supabase';
+import { useAuth } from '../../lib/auth-context';
+import { Database } from '../../lib/supabase';
+import LoadingScreen from '../../components/LoadingScreen';
 
-interface UserInfo {
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-}
-
-interface Vehicle {
-  id: string;
-  make: string;
-  model: string;
-  year: string;
-  plate: string;
-  color: string;
-}
+type UserInfo = Database['public']['Tables']['users']['Row'];
+type Vehicle = Database['public']['Tables']['vehicles']['Row'];
 
 export default function ProfileScreen() {
+  const { user, signOut } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [userInfo, setUserInfo] = useState<UserInfo>({
-    name: 'Ahmed Al-Rashid',
-    email: 'ahmed.alrashid@email.com',
+    id: '',
+    name: 'New User',
+    email: 'user@washy.ae',
     phone: '+971 50 123 4567',
-    address: 'Villa 123, Arabian Ranches 3, Dubai',
+    address: 'Dubai, UAE',
+    profile_image: undefined,
+    created_at: '',
+    updated_at: '',
   });
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>([
-    {
-      id: '1',
-      make: 'BMW',
-      model: 'X5',
-      year: '2022',
-      plate: 'DXB-A-12345',
-      color: 'White',
-    },
-    {
-      id: '2',
-      make: 'Mercedes',
-      model: 'C-Class',
-      year: '2021',
-      plate: 'DXB-B-67890',
-      color: 'Black',
-    },
-  ]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   const router = useRouter();
 
-  const handleSave = () => {
-    setIsEditing(false);
+  // Load data on component mount
+  useEffect(() => {
+    if (user) {
+      loadUserData();
+    }
+  }, [user]);
+
+  const loadUserData = async () => {
+    if (!user) return;
+
+    try {
+      const [userData, vehiclesData] = await Promise.all([
+        supabaseService.getUser(user.id),
+        supabaseService.getVehicles(user.id),
+      ]);
+
+      if (userData.data) {
+        setUserInfo(userData.data);
+        if (userData.data.profile_image) {
+          setProfileImage(userData.data.profile_image);
+        }
+      }
+
+      if (vehiclesData.data) {
+        setVehicles(vehiclesData.data);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+
+    try {
+      const updates = {
+        name: userInfo.name,
+        email: userInfo.email,
+        phone: userInfo.phone,
+        address: userInfo.address,
+        profile_image: profileImage || undefined,
+        updated_at: new Date().toISOString(),
+      };
+      
+      const { error } = await supabaseService.updateUser(user.id, updates);
+      
+      if (error) {
+        throw error;
+      }
+      
+      Alert.alert('Success', 'Your profile has been updated successfully!');
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', 'Failed to save profile. Please try again.');
+    }
   };
 
   const handleNameEdit = () => {
@@ -94,6 +130,13 @@ export default function ProfileScreen() {
     } else {
       setIsEditing(true);
     }
+  };
+
+  const handleEditUserInfo = (field: keyof UserInfo, value: string) => {
+    setUserInfo(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   const handleWhatsAppSupport = () => {
@@ -148,9 +191,43 @@ export default function ProfileScreen() {
         {
           text: "Logout",
           style: "destructive",
-          onPress: () => {
-            // Here you would typically clear any auth tokens or user data
-            router.replace('/auth');
+          onPress: async () => {
+            try {
+              await signOut();
+              router.replace('/auth');
+            } catch (error) {
+              console.error('Error during logout:', error);
+              router.replace('/auth');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleCreateSampleData = async () => {
+    if (!user) return;
+    
+    Alert.alert(
+      "Create Sample Data",
+      "This will create sample vehicles, subscription, and bookings for testing. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create",
+          onPress: async () => {
+            try {
+              const result = await supabaseService.createSampleData(user.id);
+              if (result.success) {
+                Alert.alert('Success', 'Sample data created successfully! Please refresh the app.');
+                loadUserData(); // Reload data
+              } else {
+                Alert.alert('Error', 'Failed to create sample data. Please try again.');
+              }
+            } catch (error) {
+              console.error('Error creating sample data:', error);
+              Alert.alert('Error', 'Failed to create sample data. Please try again.');
+            }
           }
         }
       ]
@@ -172,8 +249,13 @@ export default function ProfileScreen() {
   const settingsItems = [
     { icon: FileText, title: 'Terms and conditions', onPress: () => router.push('/terms') },
     { icon: Settings, title: 'Account settings', onPress: () => router.push('/account-settings') },
+    { icon: Gift, title: 'Create Sample Data (Testing)', onPress: handleCreateSampleData },
     { icon: LogOut, title: 'Logout', onPress: handleLogout },
   ];
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -202,66 +284,63 @@ export default function ProfileScreen() {
                   <TextInput
                     style={styles.nameInput}
                     value={userInfo.name}
-                    onChangeText={(text) => setUserInfo({ ...userInfo, name: text })}
+                    onChangeText={(text) => handleEditUserInfo('name', text)}
                     autoFocus
                     onBlur={handleSave}
-                    onSubmitEditing={handleSave}
                   />
                 ) : (
-                  <Text style={styles.userName}>{userInfo.name}</Text>
+                  <Text style={styles.nameText}>{userInfo.name}</Text>
                 )}
               </View>
-              <TouchableOpacity onPress={handleNameEdit} style={styles.editButton}>
-                <Edit size={16} color="#666666" />
+              <TouchableOpacity style={styles.editButton} onPress={handleNameEdit}>
+                <Edit size={16} color="#0000f0" />
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* Main Menu Items */}
+        {/* Menu Sections */}
         <View style={styles.menuSection}>
+          <Text style={styles.sectionTitle}>Account</Text>
           {menuItems.map((item, index) => (
             <TouchableOpacity key={index} style={styles.menuItem} onPress={item.onPress}>
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <item.icon size={20} color="#666666" />
-                </View>
+                <item.icon size={20} color="#666666" />
                 <Text style={styles.menuItemText}>{item.title}</Text>
               </View>
-              <ChevronRight size={20} color="#CCCCCC" />
+              <ChevronRight size={16} color="#CCCCCC" />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Support Section */}
         <View style={styles.menuSection}>
+          <Text style={styles.sectionTitle}>Support</Text>
           {supportItems.map((item, index) => (
             <TouchableOpacity key={index} style={styles.menuItem} onPress={item.onPress}>
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <item.icon size={20} color="#666666" />
-                </View>
+                <item.icon size={20} color="#666666" />
                 <Text style={styles.menuItemText}>{item.title}</Text>
               </View>
-              <ChevronRight size={20} color="#CCCCCC" />
+              <ChevronRight size={16} color="#CCCCCC" />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Settings Section */}
         <View style={styles.menuSection}>
+          <Text style={styles.sectionTitle}>Settings</Text>
           {settingsItems.map((item, index) => (
             <TouchableOpacity key={index} style={styles.menuItem} onPress={item.onPress}>
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <item.icon size={20} color="#666666" />
-                </View>
+                <item.icon size={20} color="#666666" />
                 <Text style={styles.menuItemText}>{item.title}</Text>
               </View>
-              <ChevronRight size={20} color="#CCCCCC" />
+              <ChevronRight size={16} color="#CCCCCC" />
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Bottom Spacing */}
+        <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -339,7 +418,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userName: {
+  nameText: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#000000',
@@ -389,6 +468,12 @@ const styles = StyleSheet.create({
   menuSection: {
     backgroundColor: '#FFFFFF',
     marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#000000',
+    marginBottom: 12,
   },
   menuItem: {
     flexDirection: 'row',

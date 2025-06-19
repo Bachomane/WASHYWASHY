@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Plus, Car, Trash2, Edit } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { useAuth } from '../lib/auth-context';
+import { supabaseService } from '../lib/supabase';
 
 interface Vehicle {
   id: string;
@@ -22,27 +25,8 @@ interface Vehicle {
 }
 
 export default function VehiclesScreen() {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([
-    {
-      id: '1',
-      make: 'BMW',
-      model: 'X5',
-      year: '2022',
-      plate: 'DXB-A-12345',
-      color: 'White',
-      isDefault: true,
-    },
-    {
-      id: '2',
-      make: 'Mercedes',
-      model: 'C-Class',
-      year: '2021',
-      plate: 'DXB-B-67890',
-      color: 'Black',
-      isDefault: false,
-    },
-  ]);
-
+  const { user } = useAuth();
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [newVehicle, setNewVehicle] = useState({
@@ -52,17 +36,97 @@ export default function VehiclesScreen() {
     plate: '',
     color: '',
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleAddVehicle = () => {
-    if (newVehicle.make && newVehicle.model && newVehicle.plate) {
-      const vehicle: Vehicle = {
-        id: Date.now().toString(),
-        ...newVehicle,
-        isDefault: vehicles.length === 0,
-      };
-      setVehicles([...vehicles, vehicle]);
-      setNewVehicle({ make: '', model: '', year: '', plate: '', color: '' });
-      setShowAddForm(false);
+  // Load vehicles from Supabase on mount
+  useEffect(() => {
+    if (user?.id) {
+      loadVehicles();
+    }
+  }, [user]);
+
+  const loadVehicles = async () => {
+    if (!user?.id) return;
+    
+    setIsLoading(true);
+    try {
+      const { data: vehiclesData, error } = await supabaseService.getVehicles(user.id);
+      if (error) {
+        console.error('Error loading vehicles:', error);
+        Alert.alert('Error', 'Failed to load vehicles. Please try again.');
+        return;
+      }
+      
+      if (vehiclesData) {
+        // Convert Supabase data to local format
+        const localVehicles: Vehicle[] = vehiclesData.map((vehicle: any, index: number) => ({
+          id: vehicle.id,
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.year,
+          plate: vehicle.plate,
+          color: vehicle.color,
+          isDefault: index === 0, // First vehicle is default for now
+        }));
+        setVehicles(localVehicles);
+      }
+    } catch (error) {
+      console.error('Error loading vehicles:', error);
+      Alert.alert('Error', 'Failed to load vehicles. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddVehicle = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
+
+    if (!newVehicle.make || !newVehicle.model || !newVehicle.plate) {
+      Alert.alert('Error', 'Please fill in all required fields.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { data: vehicleData, error } = await supabaseService.createVehicle({
+        user_id: user.id,
+        make: newVehicle.make,
+        model: newVehicle.model,
+        year: newVehicle.year,
+        plate: newVehicle.plate,
+        color: newVehicle.color,
+      });
+
+      if (error) {
+        console.error('Error creating vehicle:', error);
+        Alert.alert('Error', 'Failed to add vehicle. Please try again.');
+        return;
+      }
+
+      if (vehicleData) {
+        const newVehicleLocal: Vehicle = {
+          id: vehicleData.id,
+          make: vehicleData.make,
+          model: vehicleData.model,
+          year: vehicleData.year,
+          plate: vehicleData.plate,
+          color: vehicleData.color,
+          isDefault: vehicles.length === 0,
+        };
+        setVehicles([...vehicles, newVehicleLocal]);
+        setNewVehicle({ make: '', model: '', year: '', plate: '', color: '' });
+        setShowAddForm(false);
+        Alert.alert('Success', 'Vehicle added successfully!');
+      }
+    } catch (error) {
+      console.error('Error adding vehicle:', error);
+      Alert.alert('Error', 'Failed to add vehicle. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -77,20 +141,77 @@ export default function VehiclesScreen() {
     });
   };
 
-  const handleSaveEdit = () => {
-    if (editingVehicle && newVehicle.make && newVehicle.model && newVehicle.plate) {
-      setVehicles(vehicles.map(v => 
-        v.id === editingVehicle.id 
-          ? { ...v, ...newVehicle }
-          : v
-      ));
-      setEditingVehicle(null);
-      setNewVehicle({ make: '', model: '', year: '', plate: '', color: '' });
+  const handleSaveEdit = async () => {
+    if (!editingVehicle || !newVehicle.make || !newVehicle.model || !newVehicle.plate) {
+      Alert.alert('Error', 'Please fill in all required fields.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { data: vehicleData, error } = await supabaseService.updateVehicle(editingVehicle.id, {
+        make: newVehicle.make,
+        model: newVehicle.model,
+        year: newVehicle.year,
+        plate: newVehicle.plate,
+        color: newVehicle.color,
+      });
+
+      if (error) {
+        console.error('Error updating vehicle:', error);
+        Alert.alert('Error', 'Failed to update vehicle. Please try again.');
+        return;
+      }
+
+      if (vehicleData) {
+        setVehicles(vehicles.map(v => 
+          v.id === editingVehicle.id 
+            ? { ...v, ...newVehicle }
+            : v
+        ));
+        setEditingVehicle(null);
+        setNewVehicle({ make: '', model: '', year: '', plate: '', color: '' });
+        Alert.alert('Success', 'Vehicle updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating vehicle:', error);
+      Alert.alert('Error', 'Failed to update vehicle. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDeleteVehicle = (id: string) => {
-    setVehicles(vehicles.filter(v => v.id !== id));
+  const handleDeleteVehicle = async (id: string) => {
+    Alert.alert(
+      'Delete Vehicle',
+      'Are you sure you want to delete this vehicle?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            setIsSaving(true);
+            try {
+              const { error } = await supabaseService.deleteVehicle(id);
+              if (error) {
+                console.error('Error deleting vehicle:', error);
+                Alert.alert('Error', 'Failed to delete vehicle. Please try again.');
+                return;
+              }
+              
+              setVehicles(vehicles.filter(v => v.id !== id));
+              Alert.alert('Success', 'Vehicle deleted successfully!');
+            } catch (error) {
+              console.error('Error deleting vehicle:', error);
+              Alert.alert('Error', 'Failed to delete vehicle. Please try again.');
+            } finally {
+              setIsSaving(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleSetDefault = (id: string) => {
@@ -99,6 +220,16 @@ export default function VehiclesScreen() {
       isDefault: v.id === id,
     })));
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading vehicles...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -218,15 +349,22 @@ export default function VehiclesScreen() {
                   setEditingVehicle(null);
                   setNewVehicle({ make: '', model: '', year: '', plate: '', color: '' });
                 }}
+                disabled={isSaving}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={[styles.cancelButtonText, isSaving && styles.disabledText]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.saveButton}
+                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
                 onPress={editingVehicle ? handleSaveEdit : handleAddVehicle}
+                disabled={isSaving}
               >
                 <Text style={styles.saveButtonText}>
-                  {editingVehicle ? 'Save Changes' : 'Add Vehicle'}
+                  {isSaving 
+                    ? 'Saving...' 
+                    : editingVehicle 
+                      ? 'Save Changes' 
+                      : 'Add Vehicle'
+                  }
                 </Text>
               </TouchableOpacity>
             </View>
@@ -390,5 +528,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#FFFFFF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  disabledText: {
+    color: '#9CA3AF',
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#E5E7EB',
   },
 }); 

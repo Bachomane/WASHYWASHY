@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Save, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import { useAuth } from '../lib/auth-context';
+import { supabaseService } from '../lib/supabase';
 
 interface UserInfo {
   name: string;
@@ -21,13 +24,53 @@ interface UserInfo {
 }
 
 export default function PersonalDetailsScreen() {
+  const { user } = useAuth();
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<UserInfo>({
-    name: 'Ahmed Al-Rashid',
-    email: 'ahmed.alrashid@email.com',
-    phone: '+971 50 123 4567',
-    address: 'Villa 123, Arabian Ranches 3, Dubai',
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load user data from Supabase on mount
+  useEffect(() => {
+    if (user?.id) {
+      loadUserData();
+    }
+  }, [user]);
+
+  const loadUserData = async () => {
+    if (!user?.id) return;
+    
+    setIsLoading(true);
+    try {
+      const { data: userData, error } = await supabaseService.getUser(user.id);
+      if (error) {
+        console.error('Error loading user data:', error);
+        Alert.alert('Error', 'Failed to load user data. Please try again.');
+        return;
+      }
+      if (userData) {
+        setUserInfo({
+          name: userData.name || '',
+          email: userData.email || '',
+          phone: userData.phone || '',
+          address: userData.address || '',
+        });
+        if (userData.profile_image) {
+          setProfileImage(userData.profile_image);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      Alert.alert('Error', 'Failed to load user data. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -48,10 +91,41 @@ export default function PersonalDetailsScreen() {
     }
   };
 
-  const handleSave = () => {
-    // Save user info logic here
-    router.back();
+  const handleSave = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await supabaseService.updateUser(user.id, {
+        name: userInfo.name,
+        email: userInfo.email,
+        phone: userInfo.phone,
+        address: userInfo.address,
+        profile_image: profileImage || undefined,
+      });
+      
+      Alert.alert('Success', 'Personal details saved successfully!');
+      router.back();
+    } catch (error) {
+      console.error('Error saving user data:', error);
+      Alert.alert('Error', 'Failed to save personal details. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -61,8 +135,12 @@ export default function PersonalDetailsScreen() {
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Personal Details</Text>
-        <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-          <Save size={24} color="#0000f0" />
+        <TouchableOpacity 
+          onPress={handleSave} 
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          disabled={isSaving}
+        >
+          <Save size={24} color={isSaving ? "#999999" : "#0000f0"} />
         </TouchableOpacity>
       </View>
 
@@ -163,6 +241,9 @@ const styles = StyleSheet.create({
   saveButton: {
     padding: 4,
   },
+  saveButtonDisabled: {
+    backgroundColor: '#E5E5E5',
+  },
   content: {
     flex: 1,
   },
@@ -225,5 +306,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#000000',
     backgroundColor: '#FFFFFF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#000000',
   },
 }); 

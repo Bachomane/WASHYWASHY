@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,113 +11,73 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { supabaseService } from '../lib/supabase';
+import { useAuth } from '../lib/auth-context';
 
 export default function AuthScreen() {
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [otp, setOtp] = useState('');
-  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [generatedOtp, setGeneratedOtp] = useState('');
-  const phoneInputRef = useRef<TextInput>(null);
-  const otpInputRef = useRef<TextInput>(null);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const { setUser } = useAuth();
 
-  // UAE phone number validation
-  const isValidUAENumber = (number: string) => {
-    // UAE mobile numbers start with 5 and are 9 digits long
-    const uaeNumberRegex = /^5[0-9]{8}$/;
-    return uaeNumberRegex.test(number);
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
 
-  const formatPhoneNumber = (number: string) => {
-    // Remove any non-digit characters
-    const cleaned = number.replace(/\D/g, '');
-    // Limit to 9 digits
-    return cleaned.slice(0, 9);
-  };
-
-  const handlePhoneNumberChange = (text: string) => {
-    const formattedNumber = formatPhoneNumber(text);
-    setPhoneNumber(formattedNumber);
-  };
-
-  const generateOTP = () => {
-    // Generate a 6-digit OTP
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  };
-
-  const handleSendOtp = async () => {
-    if (!isValidUAENumber(phoneNumber)) {
-      Alert.alert(
-        'Invalid Phone Number',
-        'Please enter a valid UAE mobile number starting with 5 followed by 8 digits.'
-      );
+  const handleAuth = async () => {
+    if (!isValidEmail(email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
       return;
     }
-
-    setIsLoading(true);
-    try {
-      // Generate and store OTP
-      const newOtp = generateOTP();
-      setGeneratedOtp(newOtp);
-      
-      // In a real app, you would send this OTP via SMS
-      // For demo purposes, we'll just show it in an alert
-      Alert.alert(
-        'Demo OTP',
-        `Your verification code is: ${newOtp}`,
-        [{ text: 'OK' }]
-      );
-      
-      setShowOtpInput(true);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to send verification code. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otp.length !== 6) {
-      Alert.alert(
-        'Invalid OTP',
-        'Please enter the 6-digit verification code.'
-      );
+    if (password.length < 6) {
+      Alert.alert('Invalid Password', 'Password must be at least 6 characters.');
       return;
     }
-
     setIsLoading(true);
     try {
-      // Verify OTP
-      if (otp === generatedOtp) {
-        // If successful, navigate to the main app
-        router.replace('/(tabs)');
+      let result;
+      if (isSignUp) {
+        result = await supabaseService.signUpWithEmail(email, password);
       } else {
-        Alert.alert('Error', 'Invalid verification code. Please try again.');
+        result = await supabaseService.signInWithEmail(email, password);
+      }
+      const { data, error } = result;
+      if (error) {
+        const errMsg = (error && ((error as any).message || String(error))) || 'Authentication failed.';
+        Alert.alert('Error', errMsg);
+        return;
+      }
+      if (data && data.user) {
+        if (isSignUp) {
+          try {
+            await supabaseService.createUser({
+              id: data.user.id,
+              name: email.split('@')[0],
+              email: email,
+              phone: '',
+              address: '',
+            });
+          } catch (profileError) {
+            console.error('Error creating user profile:', profileError);
+          }
+        }
+        setUser(data.user);
+        router.replace('/(tabs)');
+      } else if (isSignUp) {
+        Alert.alert('Check your email', 'A confirmation email has been sent. Please confirm your email before logging in.');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to verify code. Please try again.');
+      Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    // Auto focus the phone input when the screen loads
-    if (!showOtpInput) {
-      phoneInputRef.current?.focus();
-    }
-  }, []);
-
-  useEffect(() => {
-    // Auto focus the OTP input when switching to OTP view
-    if (showOtpInput) {
-      otpInputRef.current?.focus();
-    }
-  }, [showOtpInput]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoid}
       >
@@ -131,69 +91,57 @@ export default function AuthScreen() {
           </View>
 
           <View style={styles.formContainer}>
-            <Text style={styles.title}>
-              {showOtpInput ? 'Enter OTP' : 'Enter your phone number'}
-            </Text>
+            <Text style={styles.title}>{isSignUp ? 'Sign Up' : 'Sign In'}</Text>
             <Text style={styles.subtitle}>
-              {showOtpInput 
-                ? 'We\'ve sent a verification code to your phone'
-                : 'We\'ll send you a verification code to get started'
-              }
+              {isSignUp
+                ? 'Create a new account with your email and password.'
+                : 'Sign in to your account.'}
             </Text>
-
-            {!showOtpInput ? (
-              <View style={styles.phoneInputContainer}>
-                <Text style={styles.countryCode}>+971</Text>
-                <TextInput
-                  ref={phoneInputRef}
-                  style={styles.phoneInput}
-                  placeholder="50 123 4567"
-                  keyboardType="phone-pad"
-                  value={phoneNumber}
-                  onChangeText={handlePhoneNumberChange}
-                  maxLength={9}
-                />
-              </View>
-            ) : (
-              <View style={styles.otpContainer}>
-                <TextInput
-                  ref={otpInputRef}
-                  style={styles.otpInput}
-                  placeholder="Enter 6-digit code"
-                  keyboardType="number-pad"
-                  value={otp}
-                  onChangeText={setOtp}
-                  maxLength={6}
-                />
-              </View>
-            )}
-
-            <TouchableOpacity 
+            <View style={styles.emailInputContainer}>
+              <TextInput
+                style={styles.emailInput}
+                placeholder="your.email@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Password"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
+            <TouchableOpacity
               style={[styles.button, isLoading && styles.buttonDisabled]}
-              onPress={showOtpInput ? handleVerifyOtp : handleSendOtp}
+              onPress={handleAuth}
               disabled={isLoading}
             >
               <Text style={styles.buttonText}>
-                {isLoading 
-                  ? 'Please wait...' 
-                  : showOtpInput 
-                    ? 'Verify' 
-                    : 'Send Code'
-                }
+                {isLoading
+                  ? 'Please wait...'
+                  : isSignUp
+                  ? 'Sign Up'
+                  : 'Sign In'}
               </Text>
             </TouchableOpacity>
-
-            {showOtpInput && (
-              <TouchableOpacity 
-                style={styles.resendButton}
-                onPress={handleSendOtp}
-                disabled={isLoading}
-              >
-                <Text style={styles.resendText}>Resend Code</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={() => setIsSignUp((prev) => !prev)}
+              disabled={isLoading}
+            >
+              <Text style={styles.toggleText}>
+                {isSignUp
+                  ? 'Already have an account? Sign In'
+                  : "Don't have an account? Sign Up"}
+              </Text>
+            </TouchableOpacity>
           </View>
-
           <View style={styles.footer}>
             <Text style={styles.footerText}>
               By continuing, you agree to our Terms of Service and Privacy Policy
@@ -208,136 +156,112 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#000',
   },
   keyboardAvoid: {
     flex: 1,
   },
   content: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
   welcomeContainer: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
+    marginBottom: 32,
   },
   logoText: {
     fontSize: 48,
-    fontFamily: 'Inter-Bold',
-    color: '#0000f0',
+    fontWeight: 'bold',
+    color: '#007bff',
     marginBottom: 8,
-    textAlign: 'center',
   },
   welcomeTitle: {
-    fontSize: 32,
-    fontFamily: 'Inter-Bold',
-    color: '#000000',
-    marginBottom: 8,
-    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
   },
   welcomeSubtitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#aaa',
     textAlign: 'center',
-    paddingHorizontal: 20,
   },
   formContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#000000',
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginBottom: 32,
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
     textAlign: 'center',
   },
-  phoneInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  emailInputContainer: {
+    marginBottom: 16,
+  },
+  emailInput: {
     borderWidth: 1,
     borderColor: '#E5E5E5',
     borderRadius: 12,
     paddingHorizontal: 16,
-    height: 56,
-    marginBottom: 24,
+    height: 48,
+    fontSize: 16,
+    color: '#000',
     backgroundColor: '#F8F9FF',
   },
-  countryCode: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#000000',
-    marginRight: 8,
-  },
-  phoneInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
-  },
-  otpContainer: {
+  passwordInputContainer: {
     marginBottom: 24,
   },
-  otpInput: {
+  passwordInput: {
     borderWidth: 1,
     borderColor: '#E5E5E5',
     borderRadius: 12,
     paddingHorizontal: 16,
-    height: 56,
+    height: 48,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#000',
     backgroundColor: '#F8F9FF',
   },
   button: {
-    backgroundColor: '#0000f0',
-    height: 56,
+    backgroundColor: '#007bff',
     borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0000f0',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  resendButton: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  resendText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#0000f0',
-  },
-  footer: {
-    paddingVertical: 20,
-  },
-  footerText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    textAlign: 'center',
+    marginBottom: 12,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  toggleButton: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  toggleText: {
+    color: '#007bff',
+    fontSize: 14,
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  footerText: {
+    color: '#aaa',
+    fontSize: 12,
+    textAlign: 'center',
   },
 }); 

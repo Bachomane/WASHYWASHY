@@ -8,6 +8,8 @@ import {
   Image,
   Dimensions,
   Platform,
+  Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowRight, Sparkles, Shield, Clock, MapPin, Star } from 'lucide-react-native';
@@ -21,7 +23,14 @@ export default function HomeScreen() {
   };
 
   const handleWhatsAppSupport = () => {
-    console.log('Opening WhatsApp support');
+    const phoneNumber = '971568565888';
+    const message = 'Hi! I need help with my Washy.ae car wash service.';
+    const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+    
+    Linking.openURL(whatsappUrl).catch((err) => {
+      console.error('Error opening WhatsApp:', err);
+      Alert.alert('Error', 'Could not open WhatsApp. Please make sure WhatsApp is installed.');
+    });
   };
 
   return (
