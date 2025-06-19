@@ -1,13 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 
-// These will be replaced with your actual Supabase credentials
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+// Get Supabase credentials from environment variables
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Check if Supabase is properly configured
-const isSupabaseConfigured = supabaseUrl !== 'YOUR_SUPABASE_URL' && supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY';
+const isSupabaseConfigured = 
+  supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== 'YOUR_SUPABASE_URL' && 
+  supabaseUrl !== 'https://your-project-id.supabase.co' &&
+  supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' &&
+  supabaseAnonKey !== 'your-anon-key-here';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Only create client if properly configured, otherwise use dummy values that won't cause URL errors
+const finalUrl = isSupabaseConfigured ? supabaseUrl : 'https://dummy.supabase.co';
+const finalKey = isSupabaseConfigured ? supabaseAnonKey : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDUxOTI4MDAsImV4cCI6MTk2MDc2ODgwMH0.dummy';
+
+export const supabase = createClient(finalUrl, finalKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -182,6 +192,10 @@ export interface Database {
 export const supabaseService = {
   // Auth functions
   async signInWithPhone(phone: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     try {
       const { data, error } = await supabase.auth.signInWithOtp({
         phone: phone.startsWith('+') ? phone : `+${phone}`,
@@ -203,6 +217,10 @@ export const supabaseService = {
   },
 
   async signUpWithEmail(email: string, password: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -215,6 +233,10 @@ export const supabaseService = {
   },
 
   async signInWithEmail(email: string, password: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -227,6 +249,10 @@ export const supabaseService = {
   },
 
   async verifyOtp(phone: string, token: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     try {
       const { data, error } = await supabase.auth.verifyOtp({
         phone: phone.startsWith('+') ? phone : `+${phone}`,
@@ -247,6 +273,10 @@ export const supabaseService = {
   },
 
   async verifyEmailOtp(email: string, token: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     try {
       const { data, error } = await supabase.auth.verifyOtp({
         email: email,
@@ -267,17 +297,29 @@ export const supabaseService = {
   },
 
   async signOut() {
+    if (!isSupabaseConfigured) {
+      return { error: null };
+    }
+    
     const { error } = await supabase.auth.signOut();
     return { error };
   },
 
   async getCurrentUser() {
+    if (!isSupabaseConfigured) {
+      return { user: null, error: null };
+    }
+    
     const { data: { user }, error } = await supabase.auth.getUser();
     return { user, error };
   },
 
   // User functions
   async createUser(userData: Database['public']['Tables']['users']['Insert']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     // Since the users table now references auth.users(id), we need to ensure the user exists in auth first
     const { data, error } = await supabase
       .from('users')
@@ -288,6 +330,10 @@ export const supabaseService = {
   },
 
   async getUser(userId: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: null };
+    }
+    
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -303,6 +349,10 @@ export const supabaseService = {
   },
 
   async updateUser(userId: string, updates: Database['public']['Tables']['users']['Update']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('users')
       .update(updates)
@@ -314,6 +364,10 @@ export const supabaseService = {
 
   // Vehicle functions
   async getVehicles(userId: string) {
+    if (!isSupabaseConfigured) {
+      return { data: [], error: null };
+    }
+    
     const { data, error } = await supabase
       .from('vehicles')
       .select('*')
@@ -323,6 +377,10 @@ export const supabaseService = {
   },
 
   async createVehicle(vehicleData: Database['public']['Tables']['vehicles']['Insert']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('vehicles')
       .insert(vehicleData)
@@ -332,6 +390,10 @@ export const supabaseService = {
   },
 
   async updateVehicle(vehicleId: string, updates: Database['public']['Tables']['vehicles']['Update']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('vehicles')
       .update(updates)
@@ -342,6 +404,10 @@ export const supabaseService = {
   },
 
   async deleteVehicle(vehicleId: string) {
+    if (!isSupabaseConfigured) {
+      return { error: null };
+    }
+    
     const { error } = await supabase
       .from('vehicles')
       .delete()
@@ -351,6 +417,10 @@ export const supabaseService = {
 
   // Booking functions
   async getBookings(userId: string) {
+    if (!isSupabaseConfigured) {
+      return { data: [], error: null };
+    }
+    
     const { data, error } = await supabase
       .from('bookings')
       .select(`
@@ -367,6 +437,10 @@ export const supabaseService = {
   },
 
   async createBooking(bookingData: Database['public']['Tables']['bookings']['Insert']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('bookings')
       .insert(bookingData)
@@ -376,6 +450,10 @@ export const supabaseService = {
   },
 
   async updateBooking(bookingId: string, updates: Database['public']['Tables']['bookings']['Update']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('bookings')
       .update(updates)
@@ -386,6 +464,10 @@ export const supabaseService = {
   },
 
   async cancelBooking(bookingId: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('bookings')
       .update({ 
@@ -400,6 +482,10 @@ export const supabaseService = {
 
   // Subscription functions
   async getSubscription(userId: string) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: null };
+    }
+    
     const { data, error } = await supabase
       .from('subscriptions')
       .select('*')
@@ -410,6 +496,10 @@ export const supabaseService = {
   },
 
   async createSubscription(subscriptionData: Database['public']['Tables']['subscriptions']['Insert']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('subscriptions')
       .insert(subscriptionData)
@@ -419,6 +509,10 @@ export const supabaseService = {
   },
 
   async updateSubscription(subscriptionId: string, updates: Database['public']['Tables']['subscriptions']['Update']) {
+    if (!isSupabaseConfigured) {
+      return { data: null, error: { message: 'Supabase not configured. Please set up your environment variables.' } };
+    }
+    
     const { data, error } = await supabase
       .from('subscriptions')
       .update(updates)
@@ -473,6 +567,10 @@ export const supabaseService = {
 
   // Utility function to create sample data for testing
   async createSampleData(userId: string) {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'Supabase not configured. Please set up your environment variables.' };
+    }
+    
     try {
       // Create sample vehicles
       const vehicle1 = await this.createVehicle({
@@ -537,4 +635,7 @@ export const supabaseService = {
       return { success: false, error };
     }
   },
-}; 
+
+  // Check if Supabase is configured
+  isConfigured: () => isSupabaseConfigured,
+};
